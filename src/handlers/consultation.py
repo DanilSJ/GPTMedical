@@ -63,41 +63,56 @@ async def process_analysis(message: types.Message, state: FSMContext):
             await message.answer(SUBSCRIPTION_MESSAGE_NOT_ENOUGH_MESSAGES)
             return
 
-        # Проверяем, есть ли документ
-        if message.document:
+        # Проверяем, есть ли документ или фото
+        if message.document or message.photo:
             await message.answer("Получил ваши анализы. Обрабатываю...")
             
-            # Получаем файл
-            file = await message.bot.get_file(message.document.file_id)
-            log_debug(f"Downloading file: {message.document.file_name}")
-            file_data = await message.bot.download_file(file.file_path)
-            file_bytes = file_data.read()  # Читаем байты из BytesIO
-            log_debug(f"File downloaded, size: {len(file_bytes)} bytes")
-            
-            # Извлекаем текст из документа
-            document_text = await DocumentService.extract_text_from_document(file_bytes, message.document.file_name)
-            
-            if document_text:
-                log_info(f"Successfully extracted text, length: {len(document_text)} characters")
-                # Формируем запрос к GPT
-                prompt = f"""Проанализируй следующие медицинские анализы и дай краткое заключение:
+            try:
+                if message.document:
+                    # Получаем файл
+                    file = await message.bot.get_file(message.document.file_id)
+                    log_debug(f"Downloading file: {message.document.file_name}")
+                    file_data = await message.bot.download_file(file.file_path)
+                    file_bytes = file_data.read()
+                    filename = message.document.file_name
+                else:  # message.photo
+                    # Получаем фото максимального размера
+                    photo = message.photo[-1]
+                    file = await message.bot.get_file(photo.file_id)
+                    log_debug(f"Downloading photo: {photo.file_id}")
+                    file_data = await message.bot.download_file(file.file_path)
+                    file_bytes = file_data.read()
+                    filename = f"photo_{photo.file_id}.jpg"
                 
-                {document_text}
+                log_debug(f"File downloaded, size: {len(file_bytes)} bytes")
                 
-                Пожалуйста, укажи:
-                1. Какие показатели в норме
-                2. Какие показатели отклонены от нормы
-                3. Общее заключение
-                4. Рекомендации (если есть отклонения)
-                """
+                # Извлекаем текст из документа
+                document_text = await DocumentService.extract_text_from_document(file_bytes, filename)
                 
-                response = await get_gpt_response(prompt)
-                await message.answer(response)
-            else:
-                log_error("Failed to extract text from document")
-                await message.answer("Извините, не удалось прочитать документ. Пожалуйста, убедитесь, что файл в формате PDF или DOCX.")
+                if document_text:
+                    log_info(f"Successfully extracted text, length: {len(document_text)} characters")
+                    # Формируем запрос к GPT
+                    prompt = f"""Проанализируй следующие медицинские анализы и дай краткое заключение:
+                    
+                    {document_text}
+                    
+                    Пожалуйста, укажи:
+                    1. Какие показатели в норме
+                    2. Какие показатели отклонены от нормы
+                    3. Общее заключение
+                    4. Рекомендации (если есть отклонения)
+                    """
+                    
+                    response = await get_gpt_response(prompt)
+                    await message.answer(response)
+                else:
+                    log_error("Failed to extract text from document")
+                    await message.answer("Извините, не удалось прочитать документ. Пожалуйста, убедитесь, что файл в формате PDF, DOCX или изображение (PNG, JPG).")
+            except Exception as e:
+                log_error(f"Error processing document: {str(e)}")
+                await message.answer("Произошла ошибка при обработке файла. Пожалуйста, попробуйте еще раз.")
         else:
-            await message.answer("Пожалуйста, отправьте файл с анализами в формате PDF или DOCX.")
+            await message.answer("Пожалуйста, отправьте файл с анализами в формате PDF, DOCX или изображение (PNG, JPG).")
 
         if not has_subscription:
             user.message_count += 1
