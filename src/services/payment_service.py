@@ -20,7 +20,7 @@ async def create_payment(subscription_type: SubscriptionType, user_id: int) -> d
         },
         "confirmation": {
             "type": "redirect",
-            "return_url": f"https://t.me/your_bot_username"  # Replace with your bot username
+            "return_url": f"https://t.me/dwdwedfwfewafewa_bot"  # Replace with your bot username
         },
         "capture": True,
         "description": f"Подписка {subscription_type.value}",
